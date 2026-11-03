@@ -1,111 +1,326 @@
+import { useClerk } from "@clerk/clerk-react";
 import {
-  Bell,
+  AlertTriangle,
+  ArrowRightLeft,
   Boxes,
   BrainCircuit,
+  Building2,
   ChevronDown,
-  FlaskConical,
   Home,
+  KeyRound,
+  Layers,
+  LogOut,
   Network,
   Route,
   ShieldAlert,
+  ShieldCheck,
   Syringe,
+  Truck,
+  Users,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
-import { useMeta, useSummary } from "../api/hooks";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useMeta } from "../api/hooks";
 import { useApp } from "../state/AppState";
 import { SunMark } from "./RiskSun";
 import { Toggle } from "./ui";
+import { NotificationCenter } from "./NotificationCenter";
 
-const NAV = [
-  { to: "/", label: "Dashboard", Icon: Home },
-  { to: "/check", label: "Check", Icon: FlaskConical },
-  { to: "/quarantine", label: "Quarantine", Icon: ShieldAlert },
-  { to: "/ledger", label: "Ledger", Icon: Boxes },
-  { to: "/trace", label: "Trace", Icon: Route },
-  { to: "/network", label: "Network", Icon: Network },
-  { to: "/model", label: "Model", Icon: BrainCircuit },
+const ADMIN_NAV = [
+  { to: "/admin", label: "Dashboard", Icon: Home, end: true },
+  { to: "/admin/overview", label: "Pipeline", Icon: Layers },
+  { to: "/admin/lifecycle", label: "Lifecycle Explorer", Icon: Route },
+  { to: "/admin/transactions", label: "Transactions", Icon: ArrowRightLeft },
+  { to: "/admin/fraud", label: "Fraud Center", Icon: ShieldAlert },
+  { to: "/admin/quarantine", label: "Quarantine", Icon: AlertTriangle },
+  { to: "/admin/ledger", label: "Ledger", Icon: Boxes },
+  { to: "/admin/network", label: "Registry", Icon: Network },
+  { to: "/admin/model", label: "AI Models", Icon: BrainCircuit },
+];
+
+const PARTICIPANT_NAV = [
+  { to: "/portal", label: "Workspace", Icon: Home, end: true },
+  { to: "/portal/batches", label: "My Batches", Icon: Boxes },
+  { to: "/portal/transfers", label: "Transfers & Inward", Icon: Truck },
+  { to: "/portal/identity", label: "Crypto Identity", Icon: ShieldCheck },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const isAuthPage = location.pathname === "/login" || location.pathname === "/signup";
+
   return (
-    <div className="mx-auto max-w-[1440px] px-4 pb-16 pt-5 md:px-8">
-      <TopNav />
-      <main className="mt-8">{children}</main>
+    <div className="mx-auto max-w-[1480px] px-4 pb-16 pt-4 md:px-8">
+      {!isAuthPage && <TopNav />}
+      <main className={isAuthPage ? "" : "mt-6"}>{children}</main>
       <Toasts />
     </div>
   );
 }
 
 function TopNav() {
-  const { data: summary } = useSummary();
-  const open = summary?.open_quarantine ?? 0;
+  const { portalMode, setPortalMode, activeUser, logout } = useApp();
+  const clerk = useClerk();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const [userDropdown, setUserDropdown] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Sync portal mode with URL if needed
+  useEffect(() => {
+    if (!activeUser) return;
+    if (location.pathname.startsWith("/portal") && portalMode !== "participant") {
+      setPortalMode("participant");
+    } else if (
+      (location.pathname.startsWith("/admin") ||
+        location.pathname === "/" ||
+        location.pathname === "/check" ||
+        location.pathname === "/quarantine" ||
+        location.pathname === "/ledger" ||
+        location.pathname === "/model" ||
+        location.pathname === "/network") &&
+      portalMode !== "admin" &&
+      (activeUser.role === "ADMIN" || activeUser.role === "AUDITOR")
+    ) {
+      setPortalMode("admin");
+    }
+  }, [location.pathname, activeUser, portalMode, setPortalMode]);
+
+  const navItems = portalMode === "admin" ? ADMIN_NAV : PARTICIPANT_NAV;
+  const isAdminOrAuditor = activeUser?.role === "ADMIN" || activeUser?.role === "AUDITOR";
+
   return (
-    <header className="flex flex-wrap items-center justify-between gap-4">
-      <div className="flex items-center gap-4">
-        <Link to="/" className="flex items-center gap-2.5" aria-label="AgriChain Sentinel home">
-          <span className="spin-slow inline-flex">
-            <SunMark size={34} />
-          </span>
-          <span className="hidden leading-tight lg:block">
-            <span className="block text-sm font-semibold tracking-wide text-ink">AgriChain</span>
-            <span className="block text-[11px] tracking-[0.2em] text-gold">SENTINEL</span>
-          </span>
-        </Link>
-        <nav className="pill flex items-center gap-1 border border-line bg-panel p-1.5" aria-label="Main">
-          {NAV.map(({ to, label, Icon }) => (
+    <header className="space-y-3">
+      {/* Upper Bar: Brand, Dual-Portal Switcher, Simulator, Profile */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Link to="/" className="flex items-center gap-2.5" aria-label="AgriChain Sentinel home">
+            <span className="spin-slow inline-flex">
+              <SunMark size={34} />
+            </span>
+            <span className="hidden leading-tight lg:block">
+              <span className="block text-sm font-semibold tracking-wide text-ink">AgriChain</span>
+              <span className="block text-[10px] font-bold tracking-[0.25em] text-gold">SENTINEL</span>
+            </span>
+          </Link>
+
+          {/* Role-Specific Portal Header Pill / Switcher */}
+          {activeUser && (
+            activeUser.role === "ADMIN" ? (
+              <div className="flex items-center rounded-2xl border border-line bg-panel p-1 shadow-sm">
+                <button
+                  onClick={() => {
+                    setPortalMode("admin");
+                    if (location.pathname.startsWith("/portal")) {
+                      navigate("/admin/lifecycle");
+                    }
+                  }}
+                  className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-bold transition ${
+                    portalMode === "admin"
+                      ? "bg-gold text-gold-ink shadow-md"
+                      : "text-muted hover:text-ink"
+                  }`}
+                >
+                  <Building2 size={14} />
+                  <span>Admin Tower</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setPortalMode("participant");
+                    if (!location.pathname.startsWith("/portal")) {
+                      navigate("/portal");
+                    }
+                  }}
+                  className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-bold transition ${
+                    portalMode === "participant"
+                      ? "bg-gold text-gold-ink shadow-md"
+                      : "text-muted hover:text-ink"
+                  }`}
+                >
+                  <Users size={14} />
+                  <span>Participant Portal</span>
+                </button>
+              </div>
+            ) : activeUser.role === "AUDITOR" ? (
+              <div className="flex items-center gap-2 rounded-2xl border border-line bg-panel px-3.5 py-1.5 text-xs font-bold text-ink shadow-sm">
+                <ShieldCheck size={14} className="text-gold" />
+                <span>Auditor Regulatory Tower</span>
+                <span className="rounded-full bg-gold/15 border border-gold/30 px-2 py-0.5 text-[10px] font-mono font-bold text-gold">
+                  AUDITOR
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 rounded-2xl border border-line bg-panel px-3.5 py-1.5 text-xs font-bold text-ink shadow-sm">
+                <Users size={14} className="text-gold" />
+                <span>Participant Workspace</span>
+                <span className="rounded-full bg-gold/15 border border-gold/30 px-2 py-0.5 text-[10px] font-mono font-bold text-gold">
+                  {activeUser.role}
+                </span>
+              </div>
+            )
+          )}
+        </div>
+
+        {/* Right side tools */}
+        <div className="flex items-center gap-2.5">
+          {/* Simulator Controls - ONLY for Admin and Auditor */}
+          {isAdminOrAuditor && <SimulatorPill />}
+
+          {/* Live Chain Notification Center */}
+          {activeUser && <NotificationCenter />}
+
+          {/* User Account & Sign Out Menu - NO SWITCHER LIST */}
+          {activeUser ? (
+            <div className="relative" ref={userMenuRef}>
+              <button
+                onClick={() => setUserDropdown((prev) => !prev)}
+                className="flex items-center gap-2 rounded-xl border border-line bg-panel px-2.5 py-1 text-xs transition hover:border-line-2"
+                title="User Account Menu"
+                aria-label="Account Menu"
+              >
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-gold to-[#a8761c] text-[11px] font-bold text-gold-ink">
+                  {activeUser.name
+                    .split(" ")
+                    .map((p) => p[0])
+                    .join("")
+                    .slice(0, 2)}
+                </div>
+                <div className="hidden sm:block text-left leading-tight">
+                  <span className="block font-bold text-ink max-w-[110px] truncate">{activeUser.name}</span>
+                  <span className="block text-[9px] font-mono text-gold font-bold">
+                    {activeUser.role}
+                    {activeUser.participant_id ? ` · ${activeUser.participant_id}` : ""}
+                  </span>
+                </div>
+                <ChevronDown size={13} className="text-muted ml-0.5" />
+              </button>
+
+              {userDropdown && (
+                <div className="slide-in absolute right-0 top-[calc(100%+8px)] z-50 w-72 rounded-2xl border border-line bg-panel-2 p-3 shadow-2xl">
+                  {/* Current Active Account Profile */}
+                  <div className="border-b border-line pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-gold to-[#a8761c] text-xs font-bold text-gold-ink shadow-sm">
+                        {activeUser.name
+                          .split(" ")
+                          .map((p) => p[0])
+                          .join("")
+                          .slice(0, 2)}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-sm text-ink truncate">{activeUser.name}</h4>
+                        <p className="text-[11px] text-muted truncate">{activeUser.email}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between rounded-xl bg-panel p-2 border border-line text-[11px]">
+                      <div>
+                        <span className="text-muted block text-[10px]">Session Role</span>
+                        <span className="font-bold text-gold font-mono">{activeUser.role}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-muted block text-[10px]">Org Identity</span>
+                        <span className="font-bold text-ink font-mono">{activeUser.participant_id || "SYSTEM"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Navigation Shortcuts - Role Adaptive */}
+                  <div className="py-2 border-b border-line space-y-1">
+                    {isAdminOrAuditor ? (
+                      <Link
+                        to="/admin/network"
+                        onClick={() => setUserDropdown(false)}
+                        className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs text-ink hover:bg-panel-3 transition"
+                      >
+                        <Network size={14} className="text-gold" />
+                        <span>Cryptographic Registry</span>
+                      </Link>
+                    ) : (
+                      <Link
+                        to="/portal/identity"
+                        onClick={() => setUserDropdown(false)}
+                        className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs text-ink hover:bg-panel-3 transition"
+                      >
+                        <ShieldCheck size={14} className="text-emerald-400" />
+                        <span>Cryptographic Keys & Identity</span>
+                      </Link>
+                    )}
+                  </div>
+
+                  {/* Sign Out Action - Required to change accounts */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setUserDropdown(false);
+                        try {
+                          await clerk.signOut();
+                        } catch {
+                          /* ignore */
+                        }
+                        logout();
+                        navigate("/login");
+                      }}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-quar/15 border border-quar/30 px-3 py-2 text-xs font-bold text-quar hover:bg-quar/25 transition"
+                    >
+                      <LogOut size={14} />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <Link
+              to="/login"
+              className="btn-gold flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold shadow"
+            >
+              <KeyRound size={13} />
+              <span>Sign In</span>
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* Navigation Bar */}
+      {activeUser && (
+        <nav
+          className="flex flex-wrap items-center gap-1 rounded-2xl border border-line bg-panel p-1.5 shadow-sm overflow-x-auto"
+          aria-label="Portal Navigation"
+        >
+          {navItems.map(({ to, label, Icon, end }) => (
             <NavLink
               key={to}
               to={to}
-              end={to === "/"}
-              title={label}
+              end={end}
               className={({ isActive }) =>
-                `pill flex h-9 items-center gap-2 transition ${
+                `flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition shrink-0 ${
                   isActive
-                    ? "bg-gold px-3.5 text-gold-ink"
-                    : "w-9 justify-center text-ink-2 hover:bg-panel-3 hover:text-ink"
+                    ? "bg-gold text-gold-ink shadow-sm"
+                    : "text-ink-2 hover:bg-panel-2 hover:text-ink"
                 }`
               }
             >
-              {({ isActive }) => (
-                <>
-                  <Icon size={17} aria-hidden />
-                  {isActive ? (
-                    <span className="text-xs font-semibold">{label}</span>
-                  ) : (
-                    <span className="sr-only">{label}</span>
-                  )}
-                </>
-              )}
+              <Icon size={15} aria-hidden />
+              <span>{label}</span>
             </NavLink>
           ))}
         </nav>
-      </div>
-
-      <SimulatorPill />
-
-      <div className="flex items-center gap-2">
-        <Link
-          to="/quarantine"
-          className="relative flex h-10 w-10 items-center justify-center rounded-full border border-line bg-panel text-ink-2 hover:text-ink"
-          aria-label={`${open} transactions awaiting review`}
-          title="Quarantine queue"
-        >
-          <Bell size={17} />
-          {open > 0 && (
-            <span className="tnum absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-quar px-1 text-[10px] font-bold text-white">
-              {open}
-            </span>
-          )}
-        </Link>
-        <div
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-gold to-[#a8761c] text-xs font-bold text-gold-ink"
-          title="Signed in as Auditor (demo)"
-        >
-          AU
-        </div>
-      </div>
+      )}
     </header>
   );
 }
@@ -126,37 +341,39 @@ function SimulatorPill() {
   return (
     <div
       ref={ref}
-      className="pill relative flex items-center gap-3 border border-line bg-panel py-1.5 pl-4 pr-1.5"
+      className="relative flex items-center gap-2.5 rounded-xl border border-line bg-panel py-1 pl-3 pr-1 shadow-sm"
     >
       <span className={`h-2 w-2 rounded-full ${running ? "live-dot bg-gold" : "bg-muted"}`} aria-hidden />
       <Toggle on={running} onChange={setRunning} label="Live simulator" />
-      <span className="text-xs font-semibold text-ink">{running ? "Live stream" : "Simulator"}</span>
+      <span className="hidden md:inline text-xs font-semibold text-ink">{running ? "Stream" : "Sim"}</span>
       <select
         aria-label="Simulator speed"
         value={speedMs}
         onChange={(e) => setSpeedMs(Number(e.target.value))}
-        className="!w-auto !rounded-full !py-1 !pl-2 !pr-1 text-xs"
+        className="!w-auto !rounded-lg !py-0.5 !pl-1.5 !pr-1 text-xs border-0 bg-transparent text-ink"
       >
-        <option value={3500}>Slow</option>
-        <option value={2000}>Normal</option>
-        <option value={900}>Fast</option>
+        <option value={3500}>0.5x</option>
+        <option value={2000}>1x</option>
+        <option value={900}>2x</option>
       </select>
       <button
         onClick={() => setMenu((m) => !m)}
         disabled={busy && !running}
-        className="btn-gold flex items-center gap-1.5 px-3.5 py-2 text-xs"
+        className="btn-gold flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold"
         aria-haspopup="menu"
         aria-expanded={menu}
       >
-        <Syringe size={14} /> Inject fraud <ChevronDown size={13} />
+        <Syringe size={13} />
+        <span className="hidden sm:inline">Inject</span>
+        <ChevronDown size={11} />
       </button>
       {menu && (
         <div
           role="menu"
-          className="slide-in absolute right-0 top-[calc(100%+8px)] z-40 w-72 rounded-3xl border border-line bg-panel-2 p-2 shadow-2xl"
+          className="slide-in absolute right-0 top-[calc(100%+8px)] z-40 w-72 rounded-2xl border border-line bg-panel-2 p-2 shadow-2xl"
         >
-          <p className="px-3 pb-1 pt-2 text-[11px] uppercase tracking-wider text-muted">
-            Send one fraudulent transaction
+          <p className="px-3 pb-1 pt-2 text-[10px] uppercase tracking-wider text-muted font-bold">
+            Inject Synthetic Attack Vector
           </p>
           {meta?.fraud_types.map((f) => (
             <button
@@ -166,9 +383,9 @@ function SimulatorPill() {
                 setMenu(false);
                 await inject(f.type);
               }}
-              className="flex w-full items-center justify-between rounded-2xl px-3 py-2.5 text-left text-sm text-ink-2 hover:bg-panel-3 hover:text-ink"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs text-ink hover:bg-panel-3"
             >
-              {f.label}
+              <span className="font-semibold">{f.label}</span>
               <span className="text-[10px] text-muted">{FRAUD_HINT[f.type]}</span>
             </button>
           ))}
@@ -177,9 +394,9 @@ function SimulatorPill() {
               setMenu(false);
               navigate("/check");
             }}
-            className="mt-1 w-full rounded-2xl border border-dashed border-line px-3 py-2 text-xs text-muted hover:text-ink"
+            className="mt-1 w-full rounded-xl border border-dashed border-line px-3 py-2 text-xs text-muted hover:text-ink text-left"
           >
-            Or craft one by hand on the Check page →
+            Or craft manual transaction on Check page →
           </button>
         </div>
       )}
@@ -214,7 +431,8 @@ function Toasts() {
   const dot = { danger: "bg-quar", warn: "bg-flag", ok: "bg-clear", info: "bg-muted" } as const;
   return (
     <div
-      className="pointer-events-none fixed right-4 top-20 z-50 flex w-80 flex-col gap-2"
+      style={{ position: "fixed", right: "24px", bottom: "24px", zIndex: 9999 }}
+      className="pointer-events-none flex w-80 flex-col-reverse gap-2"
       aria-live="polite"
     >
       {toasts.map((t) => (

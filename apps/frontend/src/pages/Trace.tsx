@@ -64,7 +64,7 @@ export default function Trace() {
           ) : !batches?.length ? (
             <Empty title="No batches match" />
           ) : (
-            <ul className="scroll-thin max-h-[640px] space-y-1.5 overflow-y-auto pr-1">
+            <ul className="scroll-thin max-h-[640px] space-y-1.5 overflow-y-auto pr-1 pb-10">
               {batches.map((b) => (
                 <li key={b.id}>
                   <button
