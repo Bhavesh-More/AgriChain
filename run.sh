@@ -295,6 +295,16 @@ run_tests() {
     (cd "$FRONTEND" && npm test)
 }
 
+live_demo() {
+    need_setup || return
+    echo
+    if ! curl -sf -o /dev/null "$API_URL/api/health" 2>/dev/null; then
+        warn "The API is not running - choose option 1 or 5 first, then D again."
+        return
+    fi
+    (cd "$BACKEND" && "$PY" scripts/live_demo.py)
+}
+
 show_logs() {
     for name in api ui; do
         echo; echo "  ${BOLD}=== .run/$name.log (last 25 lines) ===${RST}"
@@ -325,6 +335,7 @@ menu() {
         echo "      [7]  Reset demo data"
         echo "      [8]  Retrain the ML model"
         echo "      [9]  Run tests"
+        echo "      [D]  Live demo script     (narrated walkthrough, API must be running)"
         echo "      [L]  Show logs"
         echo "      [0]  Exit"
         echo "   ${BOLD}======================================================${RST}"
@@ -341,6 +352,7 @@ menu() {
             7) reset_demo; pause ;;
             8) retrain; pause ;;
             9) run_tests; pause ;;
+            d | D) live_demo; pause ;;
             l | L) show_logs; pause ;;
             0 | q | Q)
                 if [ -n "$RUNNING" ]; then

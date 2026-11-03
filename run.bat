@@ -47,10 +47,12 @@ echo       [6]  Start UI only        %UI_URL%
 echo       [7]  Reset demo data
 echo       [8]  Retrain the ML model
 echo       [9]  Run tests
+echo       [D]  Live demo script     (narrated walkthrough, API must be running)
 echo       [0]  Exit
 echo    ======================================================
 echo.
-choice /c 1234567890 /n /m "    Press a number: "
+choice /c 1234567890D /n /m "    Press a key: "
+if errorlevel 11 goto demo
 if errorlevel 10 goto end
 if errorlevel 9 goto tests
 if errorlevel 8 goto retrain
@@ -386,6 +388,20 @@ echo.
 echo  === Frontend tests ===
 pushd "%FRONTEND%"
 call npm test
+popd
+goto done
+
+:demo
+call :detect
+if not defined PYEXE goto need_setup
+echo.
+curl -s -f "%API_URL%/api/health" >nul 2>&1
+if errorlevel 1 (
+    echo  [!] The API is not running - choose option 1 or 5 first, then D again.
+    goto done
+)
+pushd "%BACKEND%"
+"%PYEXE%" %PYARGS% scripts\live_demo.py
 popd
 goto done
 
