@@ -17,7 +17,7 @@ score and an explanation. Low-risk transactions are sealed into blocks. Medium-r
 High-risk ones are **quarantined** until a human auditor approves or rejects them, and that verdict is then sealed on the
 chain too. A verifier recomputes every hash, so any later edit to a transaction, a verdict or a block is detected and
 located. Every transaction is **signed by its seller (Ed25519)**, so forged invoices are caught on arrival and even a
-fully re-mined, rewritten history is exposed. Auditor verdicts feed a **learning loop** that retrains the model in place.
+fully re-mined rewrite of transaction data is exposed (a re-mined *verdict* flip is not — see `Explanation.md` §6.1). Auditor verdicts feed a **learning loop** that retrains the model in place.
 A React dashboard visualises all of it, and a built-in simulator streams realistic traffic and can inject six kinds of
 agricultural fraud plus identity spoofing on demand.
 
@@ -190,7 +190,8 @@ Split: stratified 75/25, seed 42. Training takes about 5 s. Scoring takes ~50–
 
 Ablation (F1, held-out): Rules only 0.949 · Isolation Forest only 0.356 · Logistic Regression 0.943 ·
 Random Forest only 0.968 · **Hybrid 0.964**. On the shifted set the hybrid beats rules-only (0.907 vs 0.870): rules
-are brittle when fraud gets subtler.
+are brittle when fraud gets subtler. The Random Forest alone is slightly higher on both sets (0.968 / 0.928); the hybrid
+is kept for its named reasons, the signature hard gate and the anomaly signal.
 
 Per-type recall (held-out / shifted): price 94 % / 81 % · phantom 98 % / 95 % · organic 95 % / 95 % ·
 cold-chain 95 % / 96 % · circular 92 % / 97 % · duplicate 94 % / 94 %.
@@ -319,11 +320,11 @@ agrichain/
 │   │   ├── chain/identity.py Ed25519 keys, signing, verification
 │   │   ├── ml/              features.py, rules.py, scorer.py, explain.py, dataset.py,
 │   │   │                    training.py (shared training pipeline), feedback.py (verdicts → labels)
-│   │   ├── sim/             generator.py (simulator), state.py (live sim + demo seeding)
+│   │   ├── sim/             generator.py (simulator), state.py (live sim + demo seeding), scenarios.py (demo storyline)
 │   │   └── routers/         transactions, quarantine, chain, batches, stats, sim, model, network, export, dev
-│   ├── scripts/             generate_dataset.py, train_model.py, seed_demo.py
+│   ├── scripts/             generate_dataset.py, train_model.py, seed_demo.py, live_demo.py (narrated demo)
 │   ├── artifacts/           model.joblib (2.8 MB), metrics.json ← committed; history.json after a retrain
-│   └── tests/               test_ledger.py, test_ml.py, test_api.py, test_identity_and_loop.py (32 tests)
+│   └── tests/               test_ledger.py, test_ml.py, test_api.py, test_identity_and_loop.py, test_demo_scenarios.py (38 tests + 1 xfail)
 └── frontend/
     ├── package.json, vite.config.ts, tsconfig.json, index.html
     └── src/
@@ -358,7 +359,8 @@ agrichain/
 
 | Area | What exists |
 |---|---|
-| Backend tests (32) | Merkle root/proof, PoW, tamper detection for data / verdict / header, **Ed25519 sign/verify, forged-signature hard gate, sealed rejected forgery stays valid, re-mined rewrite caught only by signatures**, CSV exports, **retrain hot-swaps the model and records history**, outdated-schema detection, every rule, honest-disclosure negative case, simulator determinism, injected-fraud detection, **feature parity DB vs in-memory**, API flows (dry run doesn't persist, 422 validation, quarantine → reject → sealed → 409 on re-review, blocks fill, every dashboard endpoint, batch trail, tamper → reset) |
+| Backend tests (38 + 1 xfail) | Demo storyline caught by its named rules, all four attack modes detected and located, duplicate not mis-reported as circular; strict xfail documents the flip-and-re-mine gap. |
+| Earlier backend tests | Merkle root/proof, PoW, tamper detection for data / verdict / header, **Ed25519 sign/verify, forged-signature hard gate, sealed rejected forgery stays valid, re-mined rewrite caught only by signatures**, CSV exports, **retrain hot-swaps the model and records history**, outdated-schema detection, every rule, honest-disclosure negative case, simulator determinism, injected-fraud detection, **feature parity DB vs in-memory**, API flows (dry run doesn't persist, 422 validation, quarantine → reject → sealed → 409 on re-review, blocks fill, every dashboard endpoint, batch trail, tamper → reset) |
 | Frontend tests (11) | Risk gauge labels and thresholds, status badge text, rule ordering, SHAP signs, signature status, ₹/kg/hash formatters, decision mapping |
 | Static checks | ruff (lint + format), TypeScript strict, Prettier |
 | End-to-end | The README demo script run in a headless browser: simulator + injection (incl. forged signature) → Quarantine reject → Ledger verify → rewrite-and-re-mine attack → verify fails on the signature → Merkle proof → reset → verify passes → Retrain → Check forged example. Zero console errors. |

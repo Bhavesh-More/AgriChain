@@ -69,7 +69,7 @@ Candidates were brainstormed across core loop, first run, coming back, trust & s
   3. Open **Quarantine**; click the item: risk gauge (e.g. 0.91), fraud-type guess, rule reasons ("quantity is 6.2× this farm's maximum plausible output"), SHAP bars. **Reject** with a note — a block records the rejection.
   4. Open **Ledger**; chain strip is green; **Verify chain** passes. Press **Tamper with block #N** (dev-only). Verify now fails and highlights the exact block and reason (hash/Merkle mismatch). **Reset demo** restores state.
   5. Open **Batch Trace**; pick a batch with a circular-trading flag; walk the timeline.
-  6. Open **Model Insights**; show ablation (hybrid beats rules-only and ML-only) and per-type recall.
+  6. Open **Model Insights**; show ablation (hybrid beats rules-only; RF alone is marginally higher F1, the hybrid adds reasons and hard gates) and per-type recall.
 - **Key screens:**
   | Route | Screen | One line |
   |---|---|---|
@@ -221,7 +221,8 @@ agrichain-sentinel/
 - **From Later, done**: click-to-prove Merkle inclusion proofs on the Ledger page.
 - **Approved deviations** (the human asked for the complete build without check-ins): the ledger record hash now covers the seller signature; the schema gained `participant.public_key`, `transaction.signature` and an `appmeta` table (old local DBs are re-seeded automatically); new dependency `cryptography`.
 - **Still in Later** (not built): Ethereum anchoring, multi-validator approval, real-dataset benchmark, HF/NLP add-on, map, i18n.
-- Tests: backend 32 (pytest), frontend 11 (Vitest); ruff, Prettier and `tsc` clean; production build OK.
+- Demo kit (2026-11-03): `scripts/live_demo.py` narrated terminal walkthrough + `app/sim/scenarios.py` hand-written storyline (launcher option D); `Explanation.md`, `Presentation.md`. Known ledger gaps documented in `Explanation.md` §6.1.
+- Tests: backend 38 + 1 xfail (pytest), frontend 11 (Vitest); ruff, Prettier and `tsc` clean; production build OK.
 - Measured: scoring incl. SHAP ≈ 50–75 ms per transaction; seeding 300 tx + 60 blocks ≈ 5 s.
 Milestones are vertical slices; each ends runnable and demoable. Rough effort for 2–3 people: M1 4 d · M2 3 d · M3 3 d · M4 3 d · M5 3 d · M6 3 d.
 

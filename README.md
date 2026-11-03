@@ -27,6 +27,7 @@ Requirements: **Python 3.11–3.13** and **Node.js 20+** (LTS).
    [5]  Start API only       [6]  Start UI only
    [7]  Reset demo data      [8]  Retrain the ML model
    [9]  Run tests            [0]  Exit
+   [D]  Live demo script     (narrated walkthrough in the terminal)
 ```
 
 Press **2** once (first time only, a few minutes), then **1** whenever you want to run it. The header shows which Python
@@ -101,6 +102,13 @@ If your scikit-learn differs and the model can't load, setup (option **2** in `r
 7. **Model**: the **learning loop** — press **Retrain with auditor feedback** and the auditors' verdicts become training labels; see before/after metrics and the version trend (live scoring switches to the new model). Then the ablation (rules vs RF vs hybrid), the threshold slider, ROC/PR curves, the confusion matrix and per-type recall on a shifted test set.
 8. **Exports**: CSV of all transactions (Dashboard), the audit trail (Quarantine) and the block headers (Ledger) open directly in Excel.
 
+**Terminal demo:** with the app running, press **D** in the launcher (or run `python scripts/live_demo.py` from
+`backend/`). It submits hand-written transactions — an honest tomato batch, then each fraud type and a forged
+signature — prints the risk score, rule reasons and SHAP factors for each, shows the sealed block, rejects the phantom
+invoice, then runs the four ledger attacks and shows each one being caught. `--yes` runs without pauses;
+`--benchmark 10` adds a detection-rate table per fraud type. See `Explanation.md` for how the ledger works and
+`Presentation.md` for slide content.
+
 **Check** lets you load a realistic example of any fraud type, edit any field (price, temperature, organic certificate…),
 re-score it instantly, and submit it to the pipeline.
 
@@ -133,7 +141,9 @@ fraud subtler. The Model page states this caveat.
 **What do the digital signatures add?** Hashes prove data didn't change *after sealing*, but whoever controls the
 database could rewrite a record and recompute every hash and re-mine every block. Each invoice is signed by its seller
 with Ed25519, and only the seller holds that key. Rewritten records therefore fail signature verification (the Ledger's
-"Rewrite history" attack shows this), and an invoice in someone else's name is rejected on arrival. In this demo the
+"Rewrite history" attack shows this), and an invoice in someone else's name is rejected on arrival. Limitation:
+signatures cover the transaction data, not the ledger status, so flipping a verdict *and* re-mining is not caught
+(see `Explanation.md` §6.1). In this demo the
 server derives everyone's keys from a seed so the simulator can sign for them; in production each party holds its own.
 
 **How does the model improve over time?** The learning loop: approved quarantines are labelled as false alarms,
@@ -149,7 +159,9 @@ course project (see `DESIGN.md` §3). Anchoring block hashes on a local Ethereum
 our own simulator gives labelled examples of *each* fraud type, which powers both the type prediction and per-type evaluation.
 
 **Why a hybrid?** Rules are precise and explainable for known patterns. The Random Forest generalises across noisy
-combinations of features. The Isolation Forest flags transactions that are just *unusual*. The ablation chart shows each alone vs combined.
+combinations of features. The Isolation Forest flags transactions that are just *unusual*. The ablation chart shows each alone vs combined:
+the Random Forest alone has a slightly higher F1 (0.968 vs 0.964); the hybrid keeps near-equal accuracy and adds
+named reasons, the signature hard gate and an anomaly signal.
 
 **Why does the verdict go on-chain and not just the transaction?** The transaction hash includes its final ledger status.
 So "quietly un-rejecting" a fraud is just as detectable as editing the quantity.
@@ -160,10 +172,10 @@ contributions toward "fraud", computed per transaction in about 50 ms.
 ## Tests
 
 ```bash
-cd backend && pytest -q && ruff check .        # 32 tests: ledger + signature tamper cases, every rule, feature parity, learning loop, API flows
+cd backend && pytest -q && ruff check .        # 38 tests + 1 documented xfail: ledger attacks, signatures, every rule, demo storyline, learning loop, API flows
 cd frontend && npm test && npm run typecheck && npm run lint && npm run build
 ```
 
 ## Layout
 
-See **`Project-Map.md`** (complete technical overview), `DESIGN.md` (design, scope and reasoning) and `CLAUDE.md` (agent instructions).
+See **`Explanation.md`** (blockchain + ML explained), **`Presentation.md`** (slide content), **`Project-Map.md`** (complete technical overview), `DESIGN.md` (design, scope and reasoning) and `CLAUDE.md` (agent instructions).
