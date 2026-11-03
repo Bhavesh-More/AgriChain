@@ -38,6 +38,10 @@ export function timeAgo(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+export function formatTime(iso: string): string {
+  return timeAgo(iso);
+}
+
 export function clock(iso: string): string {
   return new Date(iso).toLocaleString("en-IN", {
     day: "2-digit",
@@ -80,3 +84,8 @@ export function decisionFor(risk: number, flag = 0.4, quarantine = 0.7): Decisio
 export function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+export const formatKg = kg;
+export const formatCryptoHash = shortHash;
+export const formatRupees = inr;
+

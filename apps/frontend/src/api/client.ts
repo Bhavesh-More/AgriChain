@@ -11,12 +11,35 @@ export class ApiError extends Error {
   }
 }
 
+let activeRole = "ADMIN";
+let activeParticipantId: string | null = null;
+
+export function setAuthContext(role: string, participantId?: string | null) {
+  activeRole = role;
+  activeParticipantId = participantId ?? null;
+}
+
+export function getAuthContext() {
+  return { role: activeRole, participantId: activeParticipantId };
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
+  const authHeaders: Record<string, string> = {
+    "X-User-Role": activeRole,
+  };
+  if (activeParticipantId) {
+    authHeaders["X-Participant-Id"] = activeParticipantId;
+  }
+
   try {
     res = await fetch(`${BASE}/api${path}`, {
       ...init,
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+        ...(init?.headers ?? {}),
+      },
     });
   } catch {
     throw new ApiError(0, "Cannot reach the API. Is the backend running on port 8000?");

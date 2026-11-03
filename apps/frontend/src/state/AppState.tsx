@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { api } from "../api/client";
+import { api, setAuthContext } from "../api/client";
 import { useRefreshAll } from "../api/hooks";
-import type { SimResult } from "../api/types";
+import type { SimResult, UserProfile } from "../api/types";
 
 export interface Toast {
   id: number;
@@ -10,6 +10,65 @@ export interface Toast {
   body?: string;
   href?: string;
 }
+
+export const DEFAULT_USERS: UserProfile[] = [
+  {
+    id: "USR-ADMIN",
+    username: "admin",
+    name: "Alex Vance (SuperAdmin)",
+    email: "admin@agrichain.sentinel",
+    role: "ADMIN",
+    participant_id: null,
+  },
+  {
+    id: "USR-AUDITOR",
+    username: "auditor",
+    name: "Dr. Sunita Sharma (Auditor)",
+    email: "auditor@agrichain.sentinel",
+    role: "AUDITOR",
+    participant_id: null,
+  },
+  {
+    id: "USR-FARMER-1",
+    username: "farmer_ramesh",
+    name: "Ramesh Patil (Kisan Farm)",
+    email: "ramesh@kisanfarm.in",
+    role: "FARMER",
+    participant_id: "F-001",
+  },
+  {
+    id: "USR-COOP-1",
+    username: "coop_solapur",
+    name: "Solapur Agro-Cooperative",
+    email: "procurement@solapuragro.org",
+    role: "COOP",
+    participant_id: "C-001",
+  },
+  {
+    id: "USR-PROC-1",
+    username: "processor_agropack",
+    name: "AgroPack Foods Pvt Ltd",
+    email: "ops@agropack.com",
+    role: "PROCESSOR",
+    participant_id: "P-001",
+  },
+  {
+    id: "USR-DIST-1",
+    username: "distributor_coldtrans",
+    name: "ColdTrans Logistics",
+    email: "fleet@coldtrans.in",
+    role: "DISTRIBUTOR",
+    participant_id: "D-001",
+  },
+  {
+    id: "USR-RET-1",
+    username: "retailer_bigbasket",
+    name: "FreshMart Retail Organics",
+    email: "inward@freshmart.in",
+    role: "RETAILER",
+    participant_id: "R-001",
+  },
+];
 
 interface AppState {
   running: boolean;
@@ -23,6 +82,13 @@ interface AppState {
   pushToast: (t: Omit<Toast, "id">) => void;
   dismissToast: (id: number) => void;
   lastError: string | null;
+  activeUser: UserProfile | null;
+  setActiveUser: (u: UserProfile | null) => void;
+  loginAsDemo: (u: UserProfile) => void;
+  logout: () => void;
+  isAuthenticated: boolean;
+  portalMode: "admin" | "participant";
+  setPortalMode: (mode: "admin" | "participant") => void;
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -34,9 +100,82 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [feed, setFeed] = useState<SimResult[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [lastError, setLastError] = useState<string | null>(null);
+
+  const [activeUser, setActiveUserState] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem("agrichain_user");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.role) {
+          setAuthContext(parsed.role, parsed.participant_id);
+          return parsed;
+        }
+      }
+    } catch {
+      /* fallback */
+    }
+    setAuthContext("", null);
+    return null;
+  });
+
+  const isAuthenticated = !!activeUser;
+
+  const [portalMode, setPortalModeState] = useState<"admin" | "participant">(() => {
+    if (!activeUser) return "participant";
+    return activeUser.role === "ADMIN" || activeUser.role === "AUDITOR" ? "admin" : "participant";
+  });
+
   const refresh = useRefreshAll();
   const inFlight = useRef(false);
   const toastId = useRef(0);
+
+  const setActiveUser = useCallback(
+    (u: UserProfile | null) => {
+      setActiveUserState(u);
+      if (u) {
+        setAuthContext(u.role, u.participant_id);
+        try {
+          localStorage.setItem("agrichain_user", JSON.stringify(u));
+        } catch {
+          /* storage unavailable */
+        }
+        setPortalModeState(u.role === "ADMIN" || u.role === "AUDITOR" ? "admin" : "participant");
+      } else {
+        setAuthContext("", null);
+        try {
+          localStorage.removeItem("agrichain_user");
+        } catch {
+          /* ignore */
+        }
+        setPortalModeState("participant");
+      }
+      refresh();
+    },
+    [refresh],
+  );
+
+  const setPortalMode = useCallback((mode: "admin" | "participant") => {
+    setPortalModeState(mode);
+  }, []);
+
+  const loginAsDemo = useCallback(
+    (u: UserProfile) => {
+      setActiveUser(u);
+    },
+    [setActiveUser],
+  );
+
+  const logout = useCallback(() => {
+    try {
+      localStorage.removeItem("agrichain_user");
+    } catch {
+      /* ignore */
+    }
+    setActiveUserState(null);
+    setAuthContext("", null);
+    setPortalModeState("participant");
+    refresh();
+  }, [refresh]);
 
   const dismissToast = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), []);
   const pushToast = useCallback(
@@ -63,7 +202,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               tone: "danger",
               title: `Quarantined: ${r.pred_label}`,
               body: `${r.tx_id} · risk ${(r.risk * 100).toFixed(0)}% — held for auditor review`,
-              href: "/quarantine",
+              href: "/admin/quarantine",
             });
           else if (r.decision === "FLAGGED" && r.injected)
             pushToast({
@@ -98,14 +237,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [pushToast, refresh],
   );
 
+  const inject = useCallback((type: string) => step(type), [step]);
+
   useEffect(() => {
     if (!running) return;
-    step();
-    const id = window.setInterval(() => step(), speedMs);
-    return () => window.clearInterval(id);
+    const t = window.setInterval(step, speedMs);
+    return () => window.clearInterval(t);
   }, [running, speedMs, step]);
-
-  const inject = useCallback((type: string) => step(type), [step]);
 
   return (
     <Ctx.Provider
@@ -121,6 +259,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         pushToast,
         dismissToast,
         lastError,
+        activeUser,
+        setActiveUser,
+        loginAsDemo,
+        logout,
+        isAuthenticated,
+        portalMode,
+        setPortalMode,
       }}
     >
       {children}
@@ -130,6 +275,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
 export function useApp(): AppState {
   const v = useContext(Ctx);
-  if (!v) throw new Error("useApp outside provider");
+  if (!v) throw new Error("useApp must be inside AppStateProvider");
   return v;
 }
