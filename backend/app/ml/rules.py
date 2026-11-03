@@ -60,7 +60,9 @@ def evaluate_rules(tx: dict, feats: dict[str, float]) -> list[dict]:
             }
         )
 
-    if feats["buyer_in_trail"]:
+    # A resubmitted invoice also has its buyer "in the trail" (from the original invoice); DUPLICATE is
+    # the true explanation there. rule_score is unchanged (DUPLICATE's severity is higher).
+    if feats["buyer_in_trail"] and not feats["duplicate_seen"]:
         hits.append(
             {
                 "id": "CIRCULAR",

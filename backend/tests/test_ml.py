@@ -61,6 +61,11 @@ def test_each_rule_fires_on_its_pattern():
     )
 
 
+def test_duplicate_invoice_is_not_also_reported_as_circular():
+    earlier = base_tx(id="TX-0", timestamp=datetime(2026, 5, 1, 9))
+    assert rule_ids(base_tx(), [earlier]) == {"DUPLICATE"}
+
+
 def test_honest_breach_disclosure_is_not_a_rule_hit():
     assert "COLD_CHAIN" not in rule_ids(base_tx(temp_max_c=20.0, cold_chain_ok_claimed=False))
 
