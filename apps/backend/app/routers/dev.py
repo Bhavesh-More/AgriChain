@@ -43,14 +43,22 @@ def tamper(body: TamperIn, session: Session = Depends(get_session)) -> dict:
     blocks = list(session.exec(q).all())
     if not blocks:
         raise HTTPException(404, "No block with transactions to tamper with.")
-    block = random.choice(blocks[-12:]) if body.block_index is None else blocks[0]
-
     if body.mode == "header":
+        block = random.choice(blocks[-12:]) if body.block_index is None else blocks[0]
         block.nonce += 1
         session.commit()
         return {"block_index": block.index, "mode": "header", "change": "Block nonce edited"}
 
-    entry = ledger.block_entries(session, block.index)[0]
+    candidates = [
+        (b, e)
+        for b in (blocks[-12:] if body.block_index is None else blocks)
+        for e in ledger.block_entries(session, b.index)
+        if e.status != "REJECTED"
+    ]
+    if not candidates:
+        raise HTTPException(404, "No suitable block with committed transactions to tamper with.")
+
+    block, entry = candidates[0]
     tx = session.get(Transaction, entry.tx_id)
     before = tx.quantity_kg
     tx.quantity_kg = round(tx.quantity_kg * 10, 1)

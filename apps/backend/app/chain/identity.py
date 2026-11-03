@@ -86,9 +86,35 @@ def public_key_hex(participant_id: str) -> str:
     return raw.hex()
 
 
+def sign_arbitrary(data: dict | str | bytes, signer_id: str) -> str:
+    if isinstance(data, bytes):
+        payload = data
+    elif isinstance(data, str):
+        payload = data.encode()
+    else:
+        payload = json.dumps(data, sort_keys=True, separators=(",", ":"), default=str).encode()
+    return private_key(signer_id).sign(payload).hex()
+
+
+def verify_arbitrary(data: dict | str | bytes, signature_hex: str | None, public_hex: str | None) -> bool:
+    if not signature_hex or not public_hex:
+        return False
+    if isinstance(data, bytes):
+        payload = data
+    elif isinstance(data, str):
+        payload = data.encode()
+    else:
+        payload = json.dumps(data, sort_keys=True, separators=(",", ":"), default=str).encode()
+    return _verify(public_hex, signature_hex, payload)
+
+
 def sign(tx, signer_id: str) -> str:
     """Sign as `signer_id` (normally the seller; another id simulates a forgery)."""
-    return private_key(signer_id).sign(signing_payload(tx)).hex()
+    try:
+        payload = signing_payload(tx)
+    except (KeyError, AttributeError):
+        return sign_arbitrary(tx, signer_id)
+    return private_key(signer_id).sign(payload).hex()
 
 
 @lru_cache(maxsize=4096)
@@ -105,4 +131,8 @@ def _verify(public_hex: str, signature_hex: str, payload: bytes) -> bool:
 def verify(tx, signature_hex: str | None, public_hex: str | None) -> bool:
     if not signature_hex or not public_hex:
         return False
-    return _verify(public_hex, signature_hex, signing_payload(tx))
+    try:
+        payload = signing_payload(tx)
+    except (KeyError, AttributeError):
+        return verify_arbitrary(tx, signature_hex, public_hex)
+    return _verify(public_hex, signature_hex, payload)

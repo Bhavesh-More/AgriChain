@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from sqlmodel import Session, or_, select
 
 from app.chain import identity, ledger
+from app.notifications import notify_chain_affected
 from app.ml.explain import explain
 from app.ml.features import compute_features, history_from_records
 from app.ml.scorer import score_one
@@ -116,6 +117,26 @@ def ingest(
         ledger.enqueue(
             session, tx["id"], DECISION_TO_STATUS[assessment["decision"]], now=now or tx["timestamp"]
         )
+    elif assessment["decision"] == "QUARANTINED":
+        rule_items = assessment.get("rule_hits") or []
+        rule_names = [
+            r["rule"] if isinstance(r, dict) and "rule" in r else str(r)
+            for r in rule_items
+        ]
+        rules_str = ", ".join(rule_names) if rule_names else "Anomaly Detector"
+
+        notify_chain_affected(
+            session=session,
+            batch_id=tx.get("batch_id"),
+            title="Transaction Quarantined by AI Sentinel",
+            message=f"Transaction {tx['id']} ({tx.get('crop', 'Crop')}) placed in quarantine. Risk Score: {assessment['risk']*100:.1f}%. Rules: {rules_str}.",
+            category="QUARANTINE",
+            severity="CRITICAL",
+            tx_id=tx["id"],
+            extra_recipient_ids=[tx.get("seller_id"), tx.get("buyer_id")],
+            notify_auditors=True,
+            created_at=now or tx.get("timestamp"),
+        )
     session.commit()
     sealed = ledger.seal_pending(session, now=now) if seal else []
     return {
@@ -137,6 +158,23 @@ def review(
     status = "APPROVED" if action == "approve" else "REJECTED"
     session.add(Review(tx_id=tx_id, action=status, note=note, reviewed_at=now or datetime.now()))
     ledger.enqueue(session, tx_id, status, now=now)
+
+    # Live Chain Notification for Auditor Review Verdict
+    tx_rec = session.get(Transaction, tx_id)
+    batch_id = tx_rec.batch_id if tx_rec else None
+    notify_chain_affected(
+        session=session,
+        batch_id=batch_id,
+        title=f"Quarantine Verdict: {status}",
+        message=f"Transaction {tx_id} was {status.lower()} by compliance auditor Dr. Sunita Sharma. Note: '{note or 'Standard compliance review'}'.",
+        category="AUDIT",
+        severity="SUCCESS" if status == "APPROVED" else "CRITICAL",
+        tx_id=tx_id,
+        extra_recipient_ids=[tx_rec.seller_id, tx_rec.buyer_id] if tx_rec else None,
+        notify_auditors=True,
+        created_at=now or datetime.now(),
+    )
+
     session.commit()
     sealed = ledger.seal_pending(session, force=True, now=now) if seal else []
     return {"tx_id": tx_id, "status": status, "sealed_blocks": [b.index for b in sealed]}

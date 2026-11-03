@@ -11,7 +11,21 @@ from app.config import settings
 from app.db import engine, init_db, schema_is_current
 from app.ml.scorer import load_bundle
 from app.models import Participant
-from app.routers import batches, chain, export, model, network, quarantine, sim, stats, transactions
+from app.routers import (
+    admin,
+    batches,
+    chain,
+    export,
+    lifecycle,
+    model,
+    network,
+    notifications,
+    participant,
+    quarantine,
+    sim,
+    stats,
+    transactions,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("agrichain")
@@ -36,7 +50,21 @@ app.add_middleware(
     CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"], allow_headers=["*"]
 )
 
-for r in (transactions, quarantine, chain, batches, stats, sim, model, network, export):
+for r in (
+    transactions,
+    quarantine,
+    chain,
+    batches,
+    stats,
+    sim,
+    model,
+    network,
+    export,
+    lifecycle,
+    admin,
+    participant,
+    notifications,
+):
     app.include_router(r.router)
 
 if settings.demo_mode:
